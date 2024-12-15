@@ -184,3 +184,118 @@ void enterErrorState() {
         logEvent("Error Resolved");
     }
 }
+
+void enterRunningState() {
+    digitalWrite(BLUE_LED, HIGH);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(GREEN_LED, LOW);
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(FAN_PIN, HIGH);
+
+    updateSensors();
+    printToLCD();
+    adjustVent();
+    checkWaterLevel();
+
+    if (currentTemp < TEMP_THRESHOLD_HIGH) {
+        systemState = "IDLE";
+        logEvent("Temperature Normal");
+    }
+
+    if (digitalRead(STOP_PIN) == LOW) {
+        systemState = "DISABLED";
+        logEvent("System Stopped");
+        startPressed = false;
+    }
+}
+
+void updateSensors() {
+    DHT.read11(DHT_PIN);
+    currentTemp = DHT.temperature;
+    currentHumidity = DHT.humidity;
+}
+
+void printToLCD() {
+    if (millis() - lastUpdateMillis >= LCD_UPDATE_INTERVAL) {
+        lastUpdateMillis = millis();
+        lcd.clear(); // Clear the LCD before printing
+        lcd.setCursor(0, 0);
+        lcd.print("Temp: ");
+        lcd.print(currentTemp);
+        lcd.print("C");
+        lcd.setCursor(0, 1);
+        lcd.print("Humidity: ");
+        lcd.print(currentHumidity);
+        lcd.print("%");
+    }
+}
+
+void logEvent(String message) {
+    tmElements_t tm;
+    RTC.read(tm);
+    Serial.print(tm.Hour);
+    Serial.print(":");
+    Serial.print(tm.Minute);
+    Serial.print(":");
+    Serial.print(tm.Second);
+    Serial.print(" ");
+    Serial.print(tm.Month);
+    Serial.print("/");
+    Serial.print(tm.Day);
+    Serial.print("/");
+    Serial.print(tmYearToCalendar(tm.Year));
+    Serial.print(" - ");
+    Serial.println(message);
+}
+
+void logStartTime() {
+    tmElements_t tm;
+    RTC.read(tm);
+    Serial.print("System Start Time: ");
+    Serial.print(tm.Hour);
+    Serial.print(":");
+    Serial.print(tm.Minute);
+    Serial.print(":");
+    Serial.print(tm.Second);
+    Serial.print(" ");
+    Serial.print(tm.Month);
+    Serial.print("/");
+    Serial.print(tm.Day);
+    Serial.print("/");
+    Serial.println(tmYearToCalendar(tm.Year));
+}
+
+void adjustVent() {
+    if (digitalRead(VENT_LEFT_BUTTON) == LOW && ventPosition > SERVO_MIN_ANGLE) {
+        ventPosition -= SERVO_STEP;
+        ventServo.write(ventPosition);
+        logEvent("Vent Moved Left: " + String(ventPosition));
+    } else if (digitalRead(VENT_RIGHT_BUTTON) == LOW && ventPosition < SERVO_MAX_ANGLE) {
+        ventPosition += SERVO_STEP;
+        ventServo.write(ventPosition);
+        logEvent("Vent Moved Right: " + String(ventPosition));
+    }
+}
+
+void checkWaterLevel() {
+    if (readADC() < WATER_LEVEL_THRESHOLD) {
+        systemState = "ERROR";
+        logEvent("Water Level Low");
+    }
+}
+
+void ISR_StartButton() {
+    startPressed = true;
+}
+
+void setupADC() {
+    ADMUX = (1 << REFS0); // Use AVCC as the reference voltage
+    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1); // Enable ADC and set prescaler to 64
+}
+
+int readADC() {
+    ADMUX &= 0xF0; // Clear ADC channel selection
+    ADCSRA |= (1 << ADSC); // Start conversion
+    while (ADCSRA & (1 << ADSC)); // Wait for conversion to finish
+    return ADC; // Return ADC value
+}

@@ -113,3 +113,74 @@ void initializeSystem() {
     enterDisabledState();
 }
 
+void handleStates() {
+    if (systemState == "DISABLED") {
+        enterDisabledState();
+    } else if (systemState == "IDLE") {
+        enterIdleState();
+    } else if (systemState == "ERROR") {
+        enterErrorState();
+    } else if (systemState == "RUNNING") {
+        enterRunningState();
+    }
+}
+
+void enterDisabledState() {
+    digitalWrite(YELLOW_LED, HIGH);
+    digitalWrite(GREEN_LED, LOW);
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(BLUE_LED, LOW);
+    digitalWrite(FAN_PIN, LOW);
+
+    lcd.clear();
+    lcd.print("System Disabled");
+
+    if (startPressed) {
+        systemState = "IDLE";
+        lcd.clear();
+        lcd.print("System Enabled");
+        logEvent("System Enabled");
+        logStartTime();
+        
+    }
+}
+
+void enterIdleState() {
+    digitalWrite(GREEN_LED, HIGH);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(BLUE_LED, LOW);
+    digitalWrite(FAN_PIN, LOW);
+
+    checkWaterLevel();
+    updateSensors();
+    printToLCD();
+    adjustVent();
+
+    if (currentTemp >= TEMP_THRESHOLD_HIGH) {
+        systemState = "RUNNING";
+        logEvent("Entering RUNNING state");
+    }
+
+    if (digitalRead(STOP_PIN) == LOW) {
+        systemState = "DISABLED";
+        logEvent("System Stopped");
+        startPressed = false;
+    }
+}
+
+void enterErrorState() {
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(GREEN_LED, LOW);
+    digitalWrite(BLUE_LED, LOW);
+    digitalWrite(FAN_PIN, LOW);
+
+    lcd.clear();
+    lcd.print("Water Level Low!");
+
+    if (digitalRead(RESET_PIN) == LOW && readADC() > WATER_LEVEL_THRESHOLD) {
+        systemState = "IDLE";
+        logEvent("Error Resolved");
+    }
+}
